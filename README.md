@@ -1,63 +1,71 @@
-# Bank Exchange Rates Scraper
+# Bank Exchange Rates Scraper & Telegram Bot
 
-A Python application for scraping bank exchange rates from financial websites.
+A Python application for scraping bank exchange rates from financial websites and sending updates via Telegram.
 
 ## Features
 
-- Asynchronous web scraping for better performance
-- Supports multiple currencies (USD, EUR, etc.)
-- Saves data in both CSV and JSON formats
-- Debug mode for development and troubleshooting
-- Command-line interface for customization
+- **Exchange Rate Scraper**:
+  - Asynchronous web scraping for better performance
+  - Supports multiple currencies (USD, EUR, etc.)
+  - Saves data in both CSV and JSON formats
+  - Debug mode for development and troubleshooting
+
+- **Telegram Bot**:
+  - Get instant exchange rate updates via Telegram
+  - Subscribe to daily or weekly exchange rate notifications
+  - Customize which currencies to track
+  - Set preferred notification time
 
 ## Setup
 
 1. Create a virtual environment and install dependencies:
    ```bash
-   make setup
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows, use: .venv\Scripts\activate
+   pip install -r requirements.txt
    ```
+
+2. For the Telegram bot, you need to:
+   - Create a bot via [BotFather](https://t.me/botfather) on Telegram
+   - Copy the bot token
+   - Create a `.env` file in the project root (use `.env.example` as a template)
+   - Add your bot token to the `.env` file
+
 ## Usage
 
-Run the scraper:
+### Running the Scraper
+
+Basic scraper execution:
 ```bash
 python src/main.py
 ```
+
 With custom options:
 ```bash
 python src/main.py --debug --currencies usd eur
 ```
-## Development
 
-### Code Quality Tools
+### Running the Telegram Bot
 
-This project uses several code quality tools to maintain a consistent codebase:
+Start the Telegram bot:
+```bash
+python src/main.py --mode bot
+```
 
-1. **Black** - Code formatter
-2. **isort** - Import sorter
+With debug mode:
+```bash
+python src/main.py --mode bot --debug
+```
 
-### Makefile Commands
+### Bot Commands for Users
 
-- Format the code:
-  ```bash
-  make format
-  ```
-- Check if code is properly formatted:
-  ```bash
-  make format-check
-  ```
-- Clean generated files:
-  ```bash
-  make clean
-  ```
-## Configuration
+Once the bot is running, users can interact with it using these commands:
 
-The application can be configured via `src/config.py` or through command-line arguments.
-
-## Data
-
-- Scraped data is saved to the `data` directory in both CSV and JSON formats
-- Debug information is saved to the `debug` directory
-- Log files are created in the `logs` directory
+- `/start` or `/help` - Get help information
+- `/rates` - Get current exchange rates
+- `/subscribe` - Set up daily/weekly notifications
+- `/unsubscribe` - Cancel notifications
+- `/settings` - View current subscription settings
 
 ## Data Structure
 
@@ -71,6 +79,13 @@ The scraped data includes the following information for each bank:
 - Card sell rate
 - Last update time
 
+## Directories
+
+- `data/` - Scraped data in CSV and JSON formats, also subscription data
+- `debug/` - Debug information when run in debug mode
+- `logs/` - Log files for monitoring and troubleshooting
+- `src/` - Source code
+
 ## Advanced Features
 
 - **Asynchronous Processing**: Uses Python's asyncio for concurrent operations
@@ -80,10 +95,11 @@ The scraped data includes the following information for each bank:
 
 ## Troubleshooting
 
-If you encounter any issues with the scraper:
+If you encounter any issues:
 1. Check the log files in the `logs` directory for detailed error information
-2. Examine the debug files in the `debug` directory - the application saves HTML samples and table structures to help diagnose parsing problems
+2. Examine the debug files in the `debug` directory - these are created when running with `--debug`
 3. Verify your internet connection and access to minfin.com.ua
+4. For the Telegram bot, ensure your bot token is correctly configured
 
 ## License
 

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import asyncio
 import os
@@ -8,12 +9,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config
 from config import DEFAULT_CURRENCIES, setup_logging
-from scraper import run_scraper
+from scrapers.minfin_scraper import run_scraper
+
+# Import the telegram bot module
+try:
+    from bots.telegram import start_bot
+except ImportError:
+    # If aiogram is not installed, telegram_bot import will fail
+    start_bot = None
 
 
 # Parse command line arguments
 def parse_args():
-    parser = argparse.ArgumentParser(description="Bank Exchange Rates Scraper")
+    parser = argparse.ArgumentParser(description="Minfin Exchange Rates Scraper")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     parser.add_argument(
         "--currencies",
@@ -21,11 +29,20 @@ def parse_args():
         default=DEFAULT_CURRENCIES,
         help=f'Currencies to scrape (default: {" ".join(DEFAULT_CURRENCIES)})',
     )
+
+    # Add mode selection
+    parser.add_argument(
+        "--mode",
+        choices=["scraper", "bot"],
+        default="scraper",
+        help="Operation mode: scraper (default) or telegram bot",
+    )
+
     return parser.parse_args()
 
 
 # Setup logger
-logger = setup_logging("bank_scraper_main")
+logger = setup_logging("minfin_scraper_main")
 
 
 async def run_pipeline(currencies=None, debug_mode=False):
@@ -48,7 +65,7 @@ async def run_pipeline(currencies=None, debug_mode=False):
         logger.info("Debug mode enabled - debug files will be created")
 
     print("=" * 60)
-    print("BANK EXCHANGE RATES SCRAPER")
+    print("MINFIN EXCHANGE RATES SCRAPER")
     print("=" * 60)
 
     # Run the scraper
@@ -66,10 +83,48 @@ async def run_pipeline(currencies=None, debug_mode=False):
     return True
 
 
+async def run_bot(debug_mode=False):
+    """
+    Run the Telegram bot.
+
+    Args:
+        debug_mode: Whether to enable debug mode
+
+    Returns:
+        True if the bot started successfully, False otherwise
+    """
+    if start_bot is None:
+        logger.error("Telegram bot dependencies are not installed. Please install 'aiogram'.")
+        return False
+
+    # Set debug mode
+    config.DEBUG_MODE = debug_mode
+    if debug_mode:
+        logger.info("Debug mode enabled for bot")
+
+    print("=" * 60)
+    print("MINFIN EXCHANGE RATES TELEGRAM BOT")
+    print("=" * 60)
+
+    try:
+        await start_bot()
+        return True
+    except Exception as e:
+        logger.error(f"Bot failed to start: {e}")
+        return False
+
+
 async def main_async(args):
     """Async main function."""
     try:
-        success = await run_pipeline(currencies=args.currencies, debug_mode=args.debug)
+        if args.mode == "scraper":
+            success = await run_pipeline(currencies=args.currencies, debug_mode=args.debug)
+        elif args.mode == "bot":
+            success = await run_bot(debug_mode=args.debug)
+        else:
+            logger.error(f"Unknown mode: {args.mode}")
+            success = False
+
         return 0 if success else 1
     except Exception as e:
         logger.error(f"Unhandled exception in main: {e}", exc_info=True)

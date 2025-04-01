@@ -21,10 +21,10 @@ from config import (
     setup_logging,
 )
 
-logger = setup_logging("bank_scraper")
+logger = setup_logging("minfin_scraper")
 
 
-class BankExchangeRateScraper:
+class MinfinExchangeRateScraper:
     """
     A scraper for bank exchange rates from minfin.com.ua.
     Uses asynchronous requests for better performance and resilience.
@@ -38,13 +38,6 @@ class BankExchangeRateScraper:
     ]
 
     def __init__(self, base_url: str = DEFAULT_BASE_URL, city: str = DEFAULT_CITY):
-        """
-        Initialize the scraper with base URL and city.
-
-        Args:
-            base_url: The base URL for the website
-            city: The city for which to fetch exchange rates
-        """
         self.base_url = base_url
         self.city = city.lower()
         self.headers = {
@@ -58,8 +51,8 @@ class BankExchangeRateScraper:
         self.output_dir = DATA_DIR
         self.debug_dir = DEBUG_DIR
 
-        logger.info(f"Output directory: {self.output_dir}")
-        logger.info(f"Debug directory: {self.debug_dir}")
+        # logger.info(f"Output directory: {self.output_dir}")
+        # logger.info(f"Debug directory: {self.debug_dir}")
 
     def set_city(self, city: str) -> None:
         """Set the city for which to fetch exchange rates."""
@@ -112,18 +105,7 @@ class BankExchangeRateScraper:
     def _save_debug_file(
         self, content: str, currency: str, suffix: str, file_ext: str = "html"
     ) -> Optional[Path]:
-        """
-        Generic method to save debug information to a file.
 
-        Args:
-            content: The content to save
-            currency: The currency code
-            suffix: A suffix for the filename
-            file_ext: The file extension
-
-        Returns:
-            The path to the saved file or None if debug mode is disabled
-        """
         if not DEBUG_MODE:
             return None
 
@@ -139,16 +121,6 @@ class BankExchangeRateScraper:
         return self._save_debug_file(table, currency, "table", "html")
 
     def _extract_bank_data(self, cell_values: List[str], currency: str) -> Dict[str, Any]:
-        """
-        Extract structured bank data from table cell values.
-
-        Args:
-            cell_values: List of text values from table cells
-            currency: The currency code
-
-        Returns:
-            Dictionary containing bank exchange rate data
-        """
         bank_name = cell_values[0]
 
         # Helper function to extract and validate rate values
@@ -178,15 +150,6 @@ class BankExchangeRateScraper:
         }
 
     def _find_exchange_rate_table(self, soup: BeautifulSoup) -> Optional[Tag]:
-        """
-        Find the main exchange rates table in the HTML.
-
-        Args:
-            soup: BeautifulSoup object containing the page HTML
-
-        Returns:
-            The main table Tag object or None if not found
-        """
         all_tables = soup.find_all("table")
         logger.info(f"Found {len(all_tables)} tables on the page")
 
@@ -200,15 +163,6 @@ class BankExchangeRateScraper:
         return None
 
     def _extract_table_headers(self, table: Tag) -> Tuple[List[str], List[str]]:
-        """
-        Extract header and subheader information from the table.
-
-        Args:
-            table: The table Tag object
-
-        Returns:
-            Tuple containing (header_cells, subheader_cells)
-        """
         header_row = table.find("thead").find_all("tr")[0]
         header_cells = [cell.text.strip() for cell in header_row.find_all(["th", "td"])]
         logger.info(f"Header cells: {header_cells}")
@@ -220,16 +174,6 @@ class BankExchangeRateScraper:
         return header_cells, subheader_cells
 
     def _process_table_rows(self, table: Tag, currency: str) -> List[Dict[str, Any]]:
-        """
-        Process data rows from the exchange rate table.
-
-        Args:
-            table: The table Tag object
-            currency: The currency code
-
-        Returns:
-            List of dictionaries containing bank exchange rate data
-        """
         data = []
         rows = table.find("tbody").find_all("tr")
 
@@ -257,15 +201,6 @@ class BankExchangeRateScraper:
         return data
 
     def _sort_exchange_data(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Sort exchange rate data by cash_sell rate.
-
-        Args:
-            data: List of dictionaries containing bank exchange rate data
-
-        Returns:
-            Sorted list of dictionaries
-        """
         def key_func(x: Dict[str, Any]) -> float:
             try:
                 return float(x.get("cash_sell", "-inf")) if x.get("cash_sell") else float("-inf")
@@ -275,16 +210,6 @@ class BankExchangeRateScraper:
         return sorted(data, key=key_func)
 
     def parse_exchange_rates(self, soup: BeautifulSoup, currency: str) -> List[Dict[str, Any]]:
-        """
-        Parse the exchange rates from the HTML soup.
-
-        Args:
-            soup: BeautifulSoup object containing the page HTML
-            currency: The currency code
-
-        Returns:
-            List of dictionaries containing bank exchange rate data
-        """
         logger.info(f"Looking for exchange rate table for {currency}...")
 
         try:
@@ -315,15 +240,6 @@ class BankExchangeRateScraper:
             return []
 
     async def get_exchange_rates(self, currency: str) -> List[Dict[str, Any]]:
-        """
-        Get exchange rates for a specific currency.
-
-        Args:
-            currency: The currency code
-
-        Returns:
-            List of dictionaries containing bank exchange rate data
-        """
         try:
             html_content = await self.fetch_page(currency)
             soup = BeautifulSoup(html_content, "lxml")
@@ -334,33 +250,12 @@ class BankExchangeRateScraper:
             return []
 
     def _create_output_filename(self, currency: str, format_type: str) -> Path:
-        """
-        Create a standardized output filename.
-
-        Args:
-            currency: The currency code
-            format_type: The format type ('csv' or 'json')
-
-        Returns:
-            Path object for the output file
-        """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return self.output_dir / f"{timestamp}_{currency}_exchange_rates.{format_type}"
 
     def _save_data_to_file(
         self, data: List[Dict[str, Any]], currency: str, format_type: str
     ) -> Optional[Path]:
-        """
-        Generic method to save data to a file.
-
-        Args:
-            data: The data to save
-            currency: The currency code
-            format_type: The format type ('csv' or 'json')
-
-        Returns:
-            The path to the saved file, or None if saving failed
-        """
         if not data:
             logger.warning(f"No data to save for {currency}")
             return None
@@ -393,14 +288,7 @@ class BankExchangeRateScraper:
         return self._save_data_to_file(data, currency, "json")
 
 
-async def scrape_currency(scraper: BankExchangeRateScraper, currency: str) -> None:
-    """
-    Helper function to scrape a specific currency.
-
-    Args:
-        scraper: The scraper instance
-        currency: The currency code
-    """
+async def scrape_currency(scraper: MinfinExchangeRateScraper, currency: str) -> None:
     logger.info(f"Fetching {currency.upper()} exchange rates...")
     data = await scraper.get_exchange_rates(currency)
 
@@ -412,20 +300,11 @@ async def scrape_currency(scraper: BankExchangeRateScraper, currency: str) -> No
 
 
 async def run_scraper(currencies=None):
-    """
-    Run the scraper for specified currencies.
-
-    Args:
-        currencies: List of currency codes to scrape (defaults to USD and EUR)
-
-    Returns:
-        True if scraping was successful, False otherwise
-    """
     if currencies is None:
         currencies = ["usd", "eur"]
 
     try:
-        scraper = BankExchangeRateScraper()
+        scraper = MinfinExchangeRateScraper()
 
         # Fetch exchange rates for multiple currencies concurrently
         await asyncio.gather(*[scrape_currency(scraper, currency) for currency in currencies])
@@ -434,4 +313,4 @@ async def run_scraper(currencies=None):
         return True
     except Exception as e:
         logger.error(f"Error during scraping process: {e}")
-        return False
+        return False 
