@@ -1,19 +1,13 @@
-#!/usr/bin/env python3
 import asyncio
 import json
-import os
 import random
-import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
-# Add the src directory to the Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 import pandas as pd
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from config import (
     DATA_DIR,
@@ -22,13 +16,11 @@ from config import (
     DEFAULT_BASE_URL,
     DEFAULT_CITY,
     MAX_RETRIES,
-    PROJECT_ROOT,
     REQUEST_TIMEOUT,
     RETRY_DELAY,
     setup_logging,
 )
 
-# Setup logger
 logger = setup_logging("bank_scraper")
 
 
@@ -38,7 +30,6 @@ class BankExchangeRateScraper:
     Uses asynchronous requests for better performance and resilience.
     """
 
-    # Common user agent strings to rotate for web scraping
     USER_AGENTS = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15",
@@ -60,12 +51,10 @@ class BankExchangeRateScraper:
             "Accept-Language": "en-US,en;q=0.9,uk;q=0.8,ru;q=0.7",
         }
 
-        # Configuration
         self.max_retries = MAX_RETRIES
         self.retry_delay = RETRY_DELAY
         self.request_timeout = REQUEST_TIMEOUT
 
-        # Directory paths
         self.output_dir = DATA_DIR
         self.debug_dir = DEBUG_DIR
 
@@ -78,7 +67,6 @@ class BankExchangeRateScraper:
         logger.info(f"City set to: {self.city}")
 
     def _get_random_user_agent(self) -> str:
-        """Get a random user agent from the list to avoid detection."""
         return random.choice(self.USER_AGENTS)
 
     async def fetch_page(self, currency: str) -> str:
@@ -136,7 +124,6 @@ class BankExchangeRateScraper:
         Returns:
             The path to the saved file or None if debug mode is disabled
         """
-        # Skip saving debug files if DEBUG_MODE is False
         if not DEBUG_MODE:
             return None
 
@@ -148,8 +135,7 @@ class BankExchangeRateScraper:
         logger.info(f"Saved debug file to {filename}")
         return filename
 
-    def _save_debug_table(self, table, currency: str) -> Optional[Path]:
-        """Save a table for debugging purposes."""
+    def _save_debug_table(self, table: Tag, currency: str) -> Optional[Path]:
         return self._save_debug_file(table, currency, "table", "html")
 
     def _extract_bank_data(self, cell_values: List[str], currency: str) -> Dict[str, Any]:
@@ -165,25 +151,18 @@ class BankExchangeRateScraper:
         """
         bank_name = cell_values[0]
 
-        # Extract cash buy and sell rates
-        cash_buy = cell_values[1] if cell_values[1] and cell_values[1] != "-" else None
-        cash_sell = (
-            cell_values[3]
-            if len(cell_values) > 3 and cell_values[3] and cell_values[3] != "-"
-            else None
-        )
+        # Helper function to extract and validate rate values
+        def extract_rate(index: int) -> Optional[str]:
+            if len(cell_values) <= index:
+                return None
+            value = cell_values[index]
+            return value if value and value != "-" else None
 
-        # Extract card buy and sell rates (if available)
-        card_buy = (
-            cell_values[4]
-            if len(cell_values) > 4 and cell_values[4] and cell_values[4] != "-"
-            else None
-        )
-        card_sell = (
-            cell_values[6]
-            if len(cell_values) > 6 and cell_values[6] and cell_values[6] != "-"
-            else None
-        )
+        # Extract rates using the helper function
+        cash_buy = extract_rate(1)
+        cash_sell = extract_rate(3)
+        card_buy = extract_rate(4)
+        card_sell = extract_rate(6)
 
         # Extract update time
         update_time = cell_values[7] if len(cell_values) > 7 else None
@@ -198,6 +177,103 @@ class BankExchangeRateScraper:
             "update_time": update_time,
         }
 
+    def _find_exchange_rate_table(self, soup: BeautifulSoup) -> Optional[Tag]:
+        """
+        Find the main exchange rates table in the HTML.
+
+        Args:
+            soup: BeautifulSoup object containing the page HTML
+
+        Returns:
+            The main table Tag object or None if not found
+        """
+        all_tables = soup.find_all("table")
+        logger.info(f"Found {len(all_tables)} tables on the page")
+
+        for i, table in enumerate(all_tables, 1):
+            logger.info(f"Checking table {i}...")
+            if table.get("id") == "smTable" or "mfcur-table-sm-banks" in table.get("class", []):
+                logger.info(f"Found main exchange rates table (#{i})")
+                return table
+
+        logger.warning("Could not find the exchange rates table")
+        return None
+
+    def _extract_table_headers(self, table: Tag) -> Tuple[List[str], List[str]]:
+        """
+        Extract header and subheader information from the table.
+
+        Args:
+            table: The table Tag object
+
+        Returns:
+            Tuple containing (header_cells, subheader_cells)
+        """
+        header_row = table.find("thead").find_all("tr")[0]
+        header_cells = [cell.text.strip() for cell in header_row.find_all(["th", "td"])]
+        logger.info(f"Header cells: {header_cells}")
+
+        subheader_row = table.find("thead").find_all("tr")[1]
+        subheader_cells = [cell.text.strip() for cell in subheader_row.find_all(["th", "td"])]
+        logger.info(f"Subheader cells: {subheader_cells}")
+
+        return header_cells, subheader_cells
+
+    def _process_table_rows(self, table: Tag, currency: str) -> List[Dict[str, Any]]:
+        """
+        Process data rows from the exchange rate table.
+
+        Args:
+            table: The table Tag object
+            currency: The currency code
+
+        Returns:
+            List of dictionaries containing bank exchange rate data
+        """
+        data = []
+        rows = table.find("tbody").find_all("tr")
+
+        for i, row in enumerate(rows):
+            cells = row.find_all(["td", "th"])
+            if len(cells) < 5:  # Skip rows with insufficient data
+                continue
+
+            cell_values = [cell.text.strip() for cell in cells]
+
+            try:
+                bank_data = self._extract_bank_data(cell_values, currency)
+                bank_name = bank_data["bank"]
+
+                logger.info(
+                    f"Added data for {bank_name}: "
+                    f"cash {bank_data['cash_buy']}/{bank_data['cash_sell']}, "
+                    f"card {bank_data['card_buy']}/{bank_data['card_sell']}, "
+                    f"time {bank_data['update_time']}"
+                )
+                data.append(bank_data)
+            except Exception as e:
+                logger.error(f"Error processing row {i+3}: {e}")
+
+        return data
+
+    def _sort_exchange_data(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Sort exchange rate data by cash_sell rate.
+
+        Args:
+            data: List of dictionaries containing bank exchange rate data
+
+        Returns:
+            Sorted list of dictionaries
+        """
+        def key_func(x: Dict[str, Any]) -> float:
+            try:
+                return float(x.get("cash_sell", "-inf")) if x.get("cash_sell") else float("-inf")
+            except (ValueError, TypeError):
+                return float("-inf")
+
+        return sorted(data, key=key_func)
+
     def parse_exchange_rates(self, soup: BeautifulSoup, currency: str) -> List[Dict[str, Any]]:
         """
         Parse the exchange rates from the HTML soup.
@@ -211,69 +287,29 @@ class BankExchangeRateScraper:
         """
         logger.info(f"Looking for exchange rate table for {currency}...")
 
-        all_tables = soup.find_all("table")
-        logger.info(f"Found {len(all_tables)} tables on the page")
-
-        # Find the main exchange rates table
-        main_table = None
-        for i, table in enumerate(all_tables, 1):
-            logger.info(f"Checking table {i}...")
-            if table.get("id") == "smTable" or "mfcur-table-sm-banks" in table.get("class", []):
-                main_table = table
-                logger.info(f"Found main exchange rates table (#{i})")
-                break
-
-        if not main_table:
-            logger.warning("Could not find the exchange rates table")
-            if DEBUG_MODE:
-                self._save_debug_file(soup, currency, "sample", "txt")
-            return []
-
-        # Save the table HTML for debugging
-        self._save_debug_table(main_table, currency)
-
         try:
-            # Extract header information
-            header_row = main_table.find("thead").find_all("tr")[0]
-            header_cells = [cell.text.strip() for cell in header_row.find_all(["th", "td"])]
-            logger.info(f"Header cells: {header_cells}")
+            # Find main table
+            main_table = self._find_exchange_rate_table(soup)
+            if not main_table:
+                if DEBUG_MODE:
+                    self._save_debug_file(soup, currency, "sample", "txt")
+                return []
 
-            # Extract subheader information
-            subheader_row = main_table.find("thead").find_all("tr")[1]
-            subheader_cells = [cell.text.strip() for cell in subheader_row.find_all(["th", "td"])]
-            logger.info(f"Subheader cells: {subheader_cells}")
+            # Save the table HTML for debugging
+            self._save_debug_table(main_table, currency)
+
+            # Extract header information
+            self._extract_table_headers(main_table)
 
             # Process data rows
-            data = []
-            rows = main_table.find("tbody").find_all("tr")
+            data = self._process_table_rows(main_table, currency)
 
-            for i, row in enumerate(rows):
-                cells = row.find_all(["td", "th"])
-                if len(cells) < 5:  # Skip rows with insufficient data
-                    continue
+            # Sort the data
+            sorted_data = self._sort_exchange_data(data)
 
-                cell_values = [cell.text.strip() for cell in cells]
+            logger.info(f"Extracted data for {len(sorted_data)} banks")
+            return sorted_data
 
-                try:
-                    bank_data = self._extract_bank_data(cell_values, currency)
-                    bank_name = bank_data["bank"]
-                    cash_buy = bank_data["cash_buy"]
-                    cash_sell = bank_data["cash_sell"]
-                    card_buy = bank_data["card_buy"]
-                    card_sell = bank_data["card_sell"]
-                    update_time = bank_data["update_time"]
-
-                    logger.info(
-                        f"Added data for {bank_name}: cash {cash_buy}/{cash_sell}, card {card_buy}/{card_sell}, time {update_time}"
-                    )
-                    data.append(bank_data)
-                except Exception as e:
-                    logger.error(f"Error processing row {i+3}: {e}")
-
-            logger.info(f"Extracted data for {len(data)} banks")
-            key_func = lambda x: float(x.get("cash_sell")) if x.get("cash_sell") else float('-inf')
-            data.sort(key=key_func)
-            return data
         except Exception as e:
             logger.error(f"Error parsing table structure: {e}")
             return []
@@ -297,6 +333,20 @@ class BankExchangeRateScraper:
             logger.error(f"Error fetching exchange rates for {currency}: {e}")
             return []
 
+    def _create_output_filename(self, currency: str, format_type: str) -> Path:
+        """
+        Create a standardized output filename.
+
+        Args:
+            currency: The currency code
+            format_type: The format type ('csv' or 'json')
+
+        Returns:
+            Path object for the output file
+        """
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return self.output_dir / f"{timestamp}_{currency}_exchange_rates.{format_type}"
+
     def _save_data_to_file(
         self, data: List[Dict[str, Any]], currency: str, format_type: str
     ) -> Optional[Path]:
@@ -316,8 +366,7 @@ class BankExchangeRateScraper:
             return None
 
         try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = self.output_dir / f"{timestamp}_{currency}_exchange_rates.{format_type}"
+            filename = self._create_output_filename(currency, format_type)
 
             if format_type == "csv":
                 df = pd.DataFrame(data)

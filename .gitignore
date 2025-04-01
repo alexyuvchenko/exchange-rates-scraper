@@ -160,17 +160,10 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# PyCharm
-.idea/
 .pycharm_helpers
 
 # PyPI configuration file
 .pypirc
-
-.DS_Store
-
-# VSCode
-.vscode
 
 #reports
 reports/
