@@ -216,7 +216,7 @@ async def format_exchange_rates(data: List[Dict[str, Any]], currency: str) -> st
     if not data:
         return f"No exchange rate data available for {currency.upper()}"
 
-    top_banks = data[:5]
+    top_banks = data[:10]
     message = f"🏦 <b>Exchange Rates for {currency.upper()}</b>\n\n"
     message += f"<i>Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</i>\n\n"
 
@@ -271,7 +271,7 @@ async def send_welcome(message: Message) -> None:
         "🏦 <b>Bank Exchange Rates Bot</b>\n\n"
         "I can help you track the best exchange rates from banks.\n\n"
         "<b>Available commands:</b>\n"
-        "/rates - Get current exchange rates\n"
+        "/rates - Get current exchange rates (USD, EUR, or all)\n"
         "/subscribe - Set up daily notifications\n"
         "/unsubscribe - Stop daily notifications\n"
         "/settings - View and change your settings\n"
@@ -282,24 +282,18 @@ async def send_welcome(message: Message) -> None:
 
 
 @main_router.message(Command("rates"))
-async def get_rates(message: Message) -> None:
-    currencies = DEFAULT_CURRENCIES
-    await message.reply("Fetching the latest exchange rates... Please wait.")
-    try:
-        scraper = MinfinExchangeRateScraper()
-
-        for currency in currencies:
-            try:
-                await message.answer(f"Fetching rates for {currency.upper()}...")
-                data = await scraper.get_exchange_rates(currency)
-                formatted_message = await format_exchange_rates(data, currency)
-                await message.answer(formatted_message, parse_mode=ParseMode.HTML)
-            except Exception as e:
-                logger.error(f"Error fetching rates for {currency}: {e}")
-                await message.answer(f"Error fetching rates for {currency}: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error fetching rates: {e}")
-        await message.answer("An error occurred while fetching rates. Please try again later.")
+async def get_rates(message: Message, state: FSMContext) -> None:
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="USD"), KeyboardButton(text="EUR")],
+            [KeyboardButton(text="All currencies")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    await message.reply("Please select a currency:", reply_markup=keyboard)
+    await state.update_data(command_source="rates")
+    await state.set_state(SubscriptionStates.selecting_currencies)
 
 
 @main_router.message(Command("subscribe"))
@@ -310,6 +304,7 @@ async def subscribe_command(message: Message, state: FSMContext) -> None:
 
     keyboard = create_currency_keyboard()
     await message.reply("Select currencies you're interested in:", reply_markup=keyboard)
+    await state.update_data(command_source="subscribe")
     await state.set_state(SubscriptionStates.selecting_currencies)
 
 
@@ -345,6 +340,42 @@ async def settings_command(message: Message) -> None:
 
 @main_router.message(SubscriptionStates.selecting_currencies)
 async def process_currency_selection(message: Message, state: FSMContext) -> None:
+    # Get the data to determine which command triggered this state
+    data = await state.get_data()
+    command_source = data.get("command_source", "subscribe")
+    
+    # If this state was triggered by the /rates command
+    if command_source == "rates":
+        if message.text in ["USD", "EUR", "All currencies"]:
+            await state.clear()
+            
+            currencies = []
+            if message.text == "All currencies":
+                currencies = DEFAULT_CURRENCIES
+                await message.reply("Fetching rates for all currencies... Please wait.", reply_markup=ReplyKeyboardRemove())
+            else:
+                currencies = [message.text.lower()]
+                await message.reply(f"Fetching rates for {message.text}... Please wait.", reply_markup=ReplyKeyboardRemove())
+            
+            try:
+                scraper = MinfinExchangeRateScraper()
+
+                for currency in currencies:
+                    try:
+                        data = await scraper.get_exchange_rates(currency)
+                        formatted_message = await format_exchange_rates(data, currency)
+                        await message.answer(formatted_message, parse_mode=ParseMode.HTML)
+                    except Exception as e:
+                        logger.error(f"Error fetching rates for {currency}: {e}")
+                        await message.answer(f"Error fetching rates for {currency}: {str(e)}")
+            except Exception as e:
+                logger.error(f"Error fetching rates: {e}")
+                await message.answer("An error occurred while fetching rates. Please try again later.")
+        else:
+            await message.reply("Please select USD, EUR, or All currencies")
+        return
+        
+    # Original subscription logic follows
     user_id = str(message.from_user.id)
     subscription = subscription_manager.get(user_id)
 
