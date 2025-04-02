@@ -250,7 +250,8 @@ class MinfinExchangeRateScraper:
             return []
 
     def _create_output_filename(self, currency: str, format_type: str) -> Path:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d")
         return self.output_dir / f"{timestamp}_{currency}_exchange_rates.{format_type}"
 
     def _save_data_to_file(
@@ -313,4 +314,4 @@ async def run_scraper(currencies=None):
         return True
     except Exception as e:
         logger.error(f"Error during scraping process: {e}")
-        return False 
+        return False

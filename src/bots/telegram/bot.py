@@ -50,7 +50,7 @@ background_tasks = set()
 
 
 class UserSubscription:
-    def __init__(self, currencies: List[str] = None, schedule: str = "daily", time: str = "09:00"):
+    def __init__(self, currencies: List[str] = None, schedule: str = "daily", time: str = "09:30"):
         self.currencies = currencies or []
         self.schedule = schedule
         self.time = time
@@ -254,9 +254,20 @@ def create_schedule_keyboard() -> ReplyKeyboardMarkup:
 
 def create_time_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
-    for hour in ["08:00", "09:00", "12:00", "18:00"]:
+    for hour in ["09:30", "11:30", "13:30", "15:30", "17:30"]:
         builder.add(KeyboardButton(text=hour))
     builder.adjust(1)
+    return builder.as_markup(resize_keyboard=True)
+
+
+def create_main_menu_keyboard() -> ReplyKeyboardMarkup:
+    builder = ReplyKeyboardBuilder()
+    builder.add(KeyboardButton(text="📊 Exchange Rates"))
+    builder.add(KeyboardButton(text="📝 Subscribe"))
+    builder.add(KeyboardButton(text="⚙️ Settings"))
+    builder.add(KeyboardButton(text="❌ Unsubscribe"))
+    builder.add(KeyboardButton(text="ℹ️ Help"))
+    builder.adjust(2)  # Two buttons per row
     return builder.as_markup(resize_keyboard=True)
 
 
@@ -265,12 +276,23 @@ def is_admin(user_id: int) -> bool:
 
 
 @main_router.message(CommandStart())
-@main_router.message(Command("help"))
 async def send_welcome(message: Message) -> None:
     welcome_text = (
-        "🏦 <b>Bank Exchange Rates Bot</b>\n\n"
+        "🏦 <b>Exchange Rates Bot</b>\n\n"
+        "Welcome! I can help you track the best exchange rates from banks.\n\n"
+        "Please use the menu below to navigate:"
+    )
+    await message.reply(
+        welcome_text, parse_mode=ParseMode.HTML, reply_markup=create_main_menu_keyboard()
+    )
+
+
+@main_router.message(Command("help"))
+async def send_help(message: Message) -> None:
+    help_text = (
+        "🏦 <b>Exchange Rates Bot Help</b>\n\n"
         "I can help you track the best exchange rates from banks.\n\n"
-        "<b>Available commands:</b>\n"
+        "<b>You can use the buttons below or these commands:</b>\n"
         "/rates - Get current exchange rates (USD, EUR, or all)\n"
         "/subscribe - Set up daily notifications\n"
         "/unsubscribe - Stop daily notifications\n"
@@ -278,7 +300,35 @@ async def send_welcome(message: Message) -> None:
         "/help - Show this message\n\n"
         "Stay updated with the best exchange rates!"
     )
-    await message.reply(welcome_text, parse_mode=ParseMode.HTML)
+    await message.reply(
+        help_text, parse_mode=ParseMode.HTML, reply_markup=create_main_menu_keyboard()
+    )
+
+
+# Handle button presses from the main menu
+@main_router.message(F.text == "📊 Exchange Rates")
+async def menu_get_rates(message: Message, state: FSMContext) -> None:
+    await get_rates(message, state)
+
+
+@main_router.message(F.text == "📝 Subscribe")
+async def menu_subscribe(message: Message, state: FSMContext) -> None:
+    await subscribe_command(message, state)
+
+
+@main_router.message(F.text == "⚙️ Settings")
+async def menu_settings(message: Message) -> None:
+    await settings_command(message)
+
+
+@main_router.message(F.text == "❌ Unsubscribe")
+async def menu_unsubscribe(message: Message) -> None:
+    await unsubscribe_command(message)
+
+
+@main_router.message(F.text == "ℹ️ Help")
+async def menu_help(message: Message) -> None:
+    await send_help(message)
 
 
 @main_router.message(Command("rates"))
@@ -286,10 +336,10 @@ async def get_rates(message: Message, state: FSMContext) -> None:
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="USD"), KeyboardButton(text="EUR")],
-            [KeyboardButton(text="All currencies")]
+            [KeyboardButton(text="All currencies")],
         ],
         resize_keyboard=True,
-        one_time_keyboard=True
+        one_time_keyboard=True,
     )
     await message.reply("Please select a currency:", reply_markup=keyboard)
     await state.update_data(command_source="rates")
@@ -312,7 +362,10 @@ async def subscribe_command(message: Message, state: FSMContext) -> None:
 async def unsubscribe_command(message: Message) -> None:
     user_id = str(message.from_user.id)
     if subscription_manager.remove(user_id):
-        await message.reply("You have been unsubscribed from all notifications.")
+        await message.reply(
+            "You have been unsubscribed from all notifications.",
+            reply_markup=create_main_menu_keyboard(),
+        )
     else:
         await message.reply("You don't have any active subscriptions.")
 
@@ -331,10 +384,13 @@ async def settings_command(message: Message) -> None:
             f"<b>Time:</b> {subscription.time}\n\n"
             f"Use /subscribe to change settings or /unsubscribe to cancel."
         )
-        await message.reply(settings_text, parse_mode=ParseMode.HTML)
+        await message.reply(
+            settings_text, parse_mode=ParseMode.HTML, reply_markup=create_main_menu_keyboard()
+        )
     else:
         await message.reply(
-            "You don't have any active subscriptions. Use /subscribe to set one up."
+            "You don't have any active subscriptions. Use /subscribe to set one up.",
+            reply_markup=create_main_menu_keyboard(),
         )
 
 
@@ -343,20 +399,26 @@ async def process_currency_selection(message: Message, state: FSMContext) -> Non
     # Get the data to determine which command triggered this state
     data = await state.get_data()
     command_source = data.get("command_source", "subscribe")
-    
+
     # If this state was triggered by the /rates command
     if command_source == "rates":
         if message.text in ["USD", "EUR", "All currencies"]:
             await state.clear()
-            
+
             currencies = []
             if message.text == "All currencies":
                 currencies = DEFAULT_CURRENCIES
-                await message.reply("Fetching rates for all currencies... Please wait.", reply_markup=ReplyKeyboardRemove())
+                await message.reply(
+                    "Fetching rates for all currencies... Please wait.",
+                    reply_markup=ReplyKeyboardRemove(),
+                )
             else:
                 currencies = [message.text.lower()]
-                await message.reply(f"Fetching rates for {message.text}... Please wait.", reply_markup=ReplyKeyboardRemove())
-            
+                await message.reply(
+                    f"Fetching rates for {message.text}... Please wait.",
+                    reply_markup=ReplyKeyboardRemove(),
+                )
+
             try:
                 scraper = MinfinExchangeRateScraper()
 
@@ -368,13 +430,21 @@ async def process_currency_selection(message: Message, state: FSMContext) -> Non
                     except Exception as e:
                         logger.error(f"Error fetching rates for {currency}: {e}")
                         await message.answer(f"Error fetching rates for {currency}: {str(e)}")
+
+                # Return to main menu after displaying rates
+                await message.answer(
+                    "What would you like to do next?", reply_markup=create_main_menu_keyboard()
+                )
             except Exception as e:
                 logger.error(f"Error fetching rates: {e}")
-                await message.answer("An error occurred while fetching rates. Please try again later.")
+                await message.answer(
+                    "An error occurred while fetching rates. Please try again later.",
+                    reply_markup=create_main_menu_keyboard(),
+                )
         else:
             await message.reply("Please select USD, EUR, or All currencies")
         return
-        
+
     # Original subscription logic follows
     user_id = str(message.from_user.id)
     subscription = subscription_manager.get(user_id)
@@ -433,31 +503,38 @@ async def process_schedule_selection(message: Message, state: FSMContext) -> Non
 
 @main_router.message(SubscriptionStates.selecting_time)
 async def process_time_selection(message: Message, state: FSMContext) -> None:
+    # Time validation
+    time_pattern = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+    if not time_pattern.match(message.text):
+        await message.reply("Please enter a valid time in the format HH:MM (24-hour format).")
+        return
+
     user_id = str(message.from_user.id)
     subscription = subscription_manager.get(user_id)
 
     if not subscription:
-        await state.clear()
         await message.reply(
-            "There was an error with your subscription. Please try again with /subscribe."
+            "Something went wrong with your subscription. Please start again with /subscribe."
         )
+        await state.clear()
         return
 
-    time_pattern = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+    subscription.time = message.text
+    subscription_manager.add_or_update(user_id, subscription)
 
-    if time_pattern.match(message.text):
-        subscription.time = message.text
-        subscription_manager.add_or_update(user_id, subscription)
+    # Format currencies for display
+    currencies = ", ".join(currency.upper() for currency in subscription.currencies)
 
-        currencies = ", ".join(currency.upper() for currency in subscription.currencies)
-        await message.reply(
-            f"Subscription complete! You will receive {subscription.schedule} updates at {subscription.time} "
-            f"for the following currencies: {currencies}",
-            reply_markup=ReplyKeyboardRemove(),
-        )
-        await state.clear()
-    else:
-        await message.reply("Please enter a valid time in the format HH:MM (24-hour format).")
+    # Send a confirmation message
+    confirmation = (
+        f"✅ <b>Subscription Confirmed!</b>\n\n"
+        f"You will receive {subscription.schedule} exchange rate updates for {currencies} at {subscription.time}.\n\n"
+        f"Use /settings to view your settings or /unsubscribe to cancel."
+    )
+    await message.reply(
+        confirmation, parse_mode=ParseMode.HTML, reply_markup=create_main_menu_keyboard()
+    )
+    await state.clear()
 
 
 @admin_router.message(Command("stats"))
