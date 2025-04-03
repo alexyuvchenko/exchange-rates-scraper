@@ -33,18 +33,33 @@ def setup_logging(log_name="bank_scraper"):
     """Configure and return a logger with file and console handlers."""
     logger = logging.getLogger(log_name)
 
+    # Set the logging level
+    logger.setLevel(logging.DEBUG)
+
     # Clear any existing handlers
     if logger.handlers:
         logger.handlers.clear()
 
-    # Configure root logger
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(LOGS_DIR / f"{log_name}.log"),
-        ],
-    )
+    # Create formatters
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+
+    # Create file handler
+    log_file = LOGS_DIR / f"{log_name}.log"
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+
+    # Add handlers to logger
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
+    # Log startup message
+    logger.info(f"Logging initialized: {log_name}")
+    logger.info(f"Log file: {log_file}")
 
     return logger
