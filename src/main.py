@@ -34,8 +34,8 @@ def parse_args():
     parser.add_argument(
         "--mode",
         choices=["scraper", "bot"],
-        default="scraper",
-        help="Operation mode: scraper (default) or telegram bot",
+        default="bot",
+        help="Operation mode: telegram bot (default) or scraper",
     )
 
     return parser.parse_args()
