@@ -216,7 +216,7 @@ async def format_exchange_rates(data: List[Dict[str, Any]], currency: str) -> st
     if not data:
         return f"No exchange rate data available for {currency.upper()}"
 
-    top_banks = data[:10]
+    top_banks = data[:15]
     message = f"🏦 <b>Exchange Rates for {currency.upper()}</b>\n\n"
     message += f"<i>Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</i>\n\n"
 
