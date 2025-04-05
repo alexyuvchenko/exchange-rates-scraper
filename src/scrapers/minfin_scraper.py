@@ -51,9 +51,6 @@ class MinfinExchangeRateScraper:
         self.output_dir = DATA_DIR
         self.debug_dir = DEBUG_DIR
 
-        # logger.info(f"Output directory: {self.output_dir}")
-        # logger.info(f"Debug directory: {self.debug_dir}")
-
     def set_city(self, city: str) -> None:
         """Set the city for which to fetch exchange rates."""
         self.city = city.lower()
