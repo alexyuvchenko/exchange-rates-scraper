@@ -21,13 +21,12 @@ from aiogram.utils.chat_action import ChatActionMiddleware
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from dotenv import load_dotenv
 
-from config import DATA_DIR, DEFAULT_CURRENCIES, setup_logging
+from config import DATA_DIR, DEFAULT_CURRENCIES, TELEGRAM_BOT_TOKEN, setup_logging
 from scrapers.minfin_scraper import MinfinExchangeRateScraper
 
 logger = setup_logging("telegram_bot")
 load_dotenv()
 
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 if not TELEGRAM_BOT_TOKEN:
     logger.error("TELEGRAM_BOT_TOKEN environment variable is not set. Check .env file.")
 

@@ -2,6 +2,7 @@
 import logging
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -28,24 +29,38 @@ MAX_RETRIES = 3
 RETRY_DELAY = 2  # seconds
 REQUEST_TIMEOUT = 30.0  # seconds
 
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+
 
 # Configure logging
 def setup_logging(log_name="bank_scraper"):
-    """Configure and return a logger with console handler."""
+    """
+    Configure and return a logger with console handler.
+
+    Args:
+        log_name: Name for the logger
+
+    Returns:
+        Configured logger
+    """
     logger = logging.getLogger(log_name)
 
     log_level = logging.DEBUG if DEBUG_MODE else logging.INFO
     logger.setLevel(log_level)
 
+    # Clear existing handlers
     if logger.handlers:
         logger.handlers.clear()
 
-    formatter = logging.Formatter("%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(lineno)d %(message)s  %(funcName)s")
+    # Create formatter
+    formatter = logging.Formatter(
+        "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(lineno)d %(message)s  %(funcName)s"
+    )
 
+    # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setLevel(log_level)
     console_handler.setFormatter(formatter)
-
     logger.addHandler(console_handler)
 
     logger.info(f"Console logging initialized: {log_name} (level: {log_level})")
