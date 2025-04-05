@@ -40,7 +40,7 @@ def setup_logging(log_name="bank_scraper"):
     if logger.handlers:
         logger.handlers.clear()
 
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter("%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(lineno)d %(message)s  %(funcName)s")
 
     console_handler = logging.StreamHandler()
     console_handler.setLevel(log_level)
