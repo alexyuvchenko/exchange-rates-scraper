@@ -20,7 +20,7 @@ DEBUG_DIR.mkdir(exist_ok=True)
 DEBUG_MODE = os.getenv("DEBUG", "False").lower() in ("true", "1", "t", "yes")
 
 # Scraper defaults
-DEFAULT_BASE_URL = "https://minfin.com.ua/currency/banks/"
+DEFAULT_BASE_URL = "https://minfin.com.ua/ua/currency/banks/"
 DEFAULT_CITY = "kiev"
 DEFAULT_CURRENCIES = ["usd", "eur"]
 
@@ -29,6 +29,14 @@ MAX_RETRIES = 3
 RETRY_DELAY = 2  # seconds
 REQUEST_TIMEOUT = 30.0  # seconds
 
+# Telegram bot
+ADMIN_USER_IDS = (
+    set(map(int, os.environ.get("ADMIN_USER_IDS", "").split(",")))
+    if os.environ.get("ADMIN_USER_IDS")
+    else set()
+)
+SUBSCRIPTIONS_FILE = DATA_DIR / "subscriptions.json"
+THROTTLE_RATE = {"default": 2, "rates": 30, "subscribe": 60}
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
 
