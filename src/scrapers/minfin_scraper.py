@@ -120,21 +120,17 @@ class MinfinExchangeRateScraper:
     def _extract_bank_data(self, cell_values: List[str], currency: str) -> Dict[str, Any]:
         bank_name = cell_values[0]
 
-        # Helper function to extract and validate rate values
-        def extract_rate(index: int) -> Optional[str]:
-            if len(cell_values) <= index:
-                return None
-            value = cell_values[index]
-            return value if value and value != "-" else None
+        def split_rates(rate_str: str) -> Tuple[Optional[str], Optional[str]]:
+            if not rate_str or rate_str == "- / -":
+                return None, None
+            parts = [p.strip().replace(",", ".") for p in rate_str.split("/")]
+            buy = parts[0] if parts[0] != "-" else None
+            sell = parts[1] if len(parts) > 1 and parts[1] != "-" else None
+            return buy, sell
 
-        # Extract rates using the helper function
-        cash_buy = extract_rate(1)
-        cash_sell = extract_rate(3)
-        card_buy = extract_rate(4)
-        card_sell = extract_rate(6)
-
-        # Extract update time
-        update_time = cell_values[7] if len(cell_values) > 7 else None
+        cash_buy, cash_sell = split_rates(cell_values[1])
+        card_buy, card_sell = split_rates(cell_values[2])
+        update_time = cell_values[3] if len(cell_values) > 3 else None
 
         return {
             "bank": bank_name,
@@ -152,8 +148,18 @@ class MinfinExchangeRateScraper:
 
         for i, table in enumerate(all_tables, 1):
             logger.info(f"Checking table {i}...")
-            if table.get("id") == "smTable" or "mfcur-table-sm-banks" in table.get("class", []):
-                logger.info(f"Found main exchange rates table (#{i})")
+
+            # New check based on headers for new site structure
+            header_texts = [th.get_text(strip=True) for th in table.select("thead th")]
+            if "Банки" in header_texts and "В касах банків" in header_texts:
+                logger.info(f"Found main exchange rates table (#{i}) by new header structure")
+                return table
+
+            # Old check for backward compatibility
+            if table.get("id") == "smTable" or "mfcur-table-sm-banks" in table.get(
+                "class", []
+            ):
+                logger.info(f"Found main exchange rates table (#{i}) by old id/class")
                 return table
 
         logger.warning("Could not find the exchange rates table")
@@ -176,7 +182,7 @@ class MinfinExchangeRateScraper:
 
         for i, row in enumerate(rows):
             cells = row.find_all(["td", "th"])
-            if len(cells) < 5:  # Skip rows with insufficient data
+            if len(cells) < 4:  # Skip rows with insufficient data
                 continue
 
             cell_values = [cell.text.strip() for cell in cells]
